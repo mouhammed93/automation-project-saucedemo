@@ -1,50 +1,48 @@
 import { test, expect } from '@playwright/test';
 import * as data from '../data/testData.json';
+import { SaucePage } from '../SaucePage';
+
 
 test.describe('SauceDemo - Product Filter Project', () => {
     let page;
+    let sauce;
 
-    // 1. Hook beforeAll: Connection avec l'utilisateur standard
     test.beforeAll(async ({ browser }) => {
         page = await browser.newPage();
-        await page.goto(data.url);
-        await page.fill(data.selectors.userInput, data.user.username);
-        await page.fill(data.selectors.passInput, data.user.password);
-        await page.click(data.selectors.loginBtn);
-        await page.waitForURL('**/inventory.html');
+        sauce = new SaucePage(page);
+        
+        // Pass the whole data objects to keep the call clean
+        await sauce.login(data.url, data.selectors, data.user);
+    });
+
+    test('Step 1-8: Filtering Logic', async () => {
+        // Step 2: Verify that the default filter is "Name (A to Z)"
+        const isDefaultFilterCorrect = await sauce.verifyDefaultFilterIsNameAtoZ(data.selectors.activeFilter, 'Name (A to Z)');
+        await expect(isDefaultFilterCorrect).toBe(true);
+
+        // Step 3: Change filter to "Price (low to high)"
+        await sauce.selectFilter(data.selectors.filterLogo, data.values.lowToHigh);
+        
+        // Step 4: Verify that products are sorted by ascending price
+        const isSortedAscending = await sauce.verifyProductsSortedByAscendingPrice(data.selectors.itemPrice);
+        await expect(isSortedAscending).toBe(true);
+        
+        // Step 5: Take screenshot after sorting
+        await sauce.takeFullScreenshot('filter-low-to-high');
+        await expect(page.locator(data.selectors.activeFilter)).toHaveText('Price (low to high)');
+
+        // Step 6: Change filter to "Price (high to low)"
+        await sauce.selectFilter(data.selectors.filterLogo, data.values.highToLow);
+        await sauce.takeFullScreenshot('filter-high-to-low');
+        
+        // Step 7: Verify that the first product has the highest price
+        const hasHighestFirst = await sauce.verifyFirstProductHasHighestPrice(data.selectors.itemPrice);
+        await expect(hasHighestFirst).toBe(true);
+
+        // Step 8: Verify that the last product has the lowest price
+        const hasLowestLast = await sauce.verifyLastProductHasLowestPrice(data.selectors.itemPrice);
+        await expect(hasLowestLast).toBe(true);
     });
 
     test.afterAll(async () => { await page.close(); });
-
-    test('Step 2-8: Filtering Logic', async () => {
-        // 2. Vérifier filtre par défaut "Name (A to Z)"
-        await expect(page.locator(data.selectors.activeFilter)).toHaveText('Name (A to Z)');
-
-        // 3. Changer le filtre à "Price (low to high)"
-        await page.selectOption(data.selectors.filterLogo, data.values.lowToHigh);
-
-        // 4. Vérifier tri croissant (Helper function for cleaner code)
-        const getPrices = async () => {
-            const list = await page.locator(data.selectors.itemPrice).allInnerTexts();
-            return list.map(p => parseFloat(p.replace('$', '')));
-        };
-
-        const pricesLowHigh = await getPrices();
-        for (let i = 0; i < pricesLowHigh.length - 1; i++) {
-            expect(pricesLowHigh[i]).toBeLessThanOrEqual(pricesLowHigh[i + 1]);
-        }
-
-        // 5. Capturer une screenshot après le tri
-        await page.screenshot({ path: 'screenshots/filter-low-high.png' });
-
-        // 6. Changer le filtre à "Price (high to low)"
-        await page.selectOption(data.selectors.filterLogo, data.values.highToLow);
-
-        // 7. Vérifier que le premier produit est le plus cher (Max)
-        const pricesHighLow = await getPrices();
-        expect(pricesHighLow[0]).toBe(Math.max(...pricesHighLow));
-
-        // 8. Vérifier que le dernier produit est le moins cher (Min)
-        expect(pricesHighLow[pricesHighLow.length - 1]).toBe(Math.min(...pricesHighLow));
-    });
 });
